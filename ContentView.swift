@@ -51,4 +51,89 @@ struct ContentView: View {
     ContentView()
 }
 
+struct CameraView: UIViewControllerRepresentable{
+    @ObservedObject var viewModel : CameraViewModel
+    
+    func makeUIViewController(context: Context) -> UIViewController{
+        let cameraViewController = CameraViewController(viewModel: viewModel)
+        return cameraViewController
+    }
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
+}
 
+class CameraViewController : UIViewController {
+    var captureSession : AVCaptureSession!
+    var previewLayer : AVCaptureVideoPreviewLayer!
+    var viewModel : CameraViewModel
+    
+    init(viewModel: CameraViewModel){
+        self.viewModel = viewModel
+        super.init(nibName: nil, bundle: nil)
+    }
+    required init?(coder: NSCoder){
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    //Set up camera when view is loaded
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        //setup camera session
+        captureSession = AVCaptureSession()
+        captureSession.beginConfiguration()
+        //configure back camera
+        guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+              let videoInput = try? AVCaptureDeviceInput(device: videoDevice) else{
+            return
+        }
+        
+        captureSession.addInput(videoInput)
+        let videoOutput = AVCaptureVideoDataOutput()
+        videoOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "cameraQueue"))
+        captureSession.addOutput(videoOutput)
+        //setup
+        previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
+        previewLayer.videoGravity = .resizeAspectFill
+        previewLayer.frame = view.layer.bounds
+        view.layer.addSublayer(previewLayer)
+        captureSession.commitConfiguration()
+        captureSession.startRunning()
+    }
+}
+
+extension CameraViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
+    //detect objects
+    func detectObject(sampleBuffer : CMSampleBuffer){
+        //get image
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {return}
+        //load the coreml model
+        guard let model = try? VNCoreMLModel(for: MobileNetV2().model) else { return }
+        //create request
+        let request = VNCoreMLRequest(model: model) { (request,error) in
+            //process
+            guard let results = request.results as? [VNClassificationObservation] else { return }
+            //
+            if let firstResult = results.first, firstResult.confidence > 0.3{
+                DispatchQueue.main.async {
+                    self.viewModel.detectedObject = firstResult.identifier //update name
+                    self.viewModel.confidence = firstResult.confidence //update score
+                    print("Detected object: \(firstResult.identifier) with confidence: \(firstResult.confidence)")
+                    //example box
+                    self.viewModel.boundingBox = CGRect(x: 120, y: 100, width: 200, height: 200)
+                }
+            } else {
+                DispatchQueue.main.async {
+                    self.viewModel.detectedObject = "No object detected with sufficient confidence"
+                    self.viewModel.confidence = 0.0
+                    self.viewModel.boundingBox = .zero
+                }
+            }
+            
+        }
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [ : ])
+        try? handler.perform([request])
+    }
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        detectObject(sampleBuffer: sampleBuffer)
+    }
+}
