@@ -59,6 +59,11 @@ Volg deze stappen om het project lokaal te installeren en te starten:
 - **3D-objecten plaatsen**: Gebruik de optie “3D” om virtuele fruitmodellen in de AR-omgeving te plaatsen.  
 
 ---
+### **Bronnen** 
+
+- **ChatGpt** : 3D-modellen toevoegen
+- **Youtube** : https://youtu.be/tiMp_YRlU18?si=wnMc_H6Rn5gaSIyJ , CoreML toepassen in project.
+- 
 
 ### **Licentie**  
 Dit project is gelicentieerd onder de MIT-licentie.  
